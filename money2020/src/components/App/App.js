@@ -1,8 +1,12 @@
-import React, { Component } from 'react';
+import React, { PropTypes, Component } from 'react';
 import logo from './logo.svg';
 import './App.css';
 
 class App extends Component {
+  // static propTypes = {}
+  // static defaultProps = {}
+  // state = {}
+
   render() {
     return (
       <div className="App">
