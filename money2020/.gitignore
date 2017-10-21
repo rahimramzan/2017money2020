@@ -25,3 +25,4 @@ config.js
 .history
 *.p12
 .vscode
+config.json
