@@ -5,7 +5,7 @@ const config = require('../../config');
 
 const { MasterCardAPI } = blockchain;
 const keyStorePath = path.join(__dirname, '..', '..', config.keyFileName);
-const { keyAlias, consumerKey, keyPassword } = config;
+const { keyAlias, consumerKey, keyPassword, appId } = config;
 const authentication = new MasterCardAPI.OAuth(consumerKey, keyStorePath, keyAlias, keyPassword);
 
 MasterCardAPI.init({
@@ -44,7 +44,7 @@ const createBlockchainInstance = () => {
   const requestData = {
     network: 'Z0NE', // Don't change this. Use Z0NE
     application: {
-      name: 'MA99', // TODO: This value MUST match the package name in your protocol buffer definition
+      name: appId,
       description: '', // Description of your Blockchain application
       version: 0,
       definition: {
