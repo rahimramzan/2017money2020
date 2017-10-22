@@ -1,18 +1,20 @@
 // eslint-disable-next-line
 const path = require('path');
+const fs = require('fs');
 const blockchain = require('mastercard-blockchain');
+const protobuf = require('protobufjs');
 const config = require('../../config');
 
+const {
+  keyAlias,
+  consumerKey,
+  keyPassword,
+  appId,
+} = config;
 const { MasterCardAPI } = blockchain;
 const keyStorePath = path.join(__dirname, '..', '..', config.keyFileName);
-const { keyAlias, consumerKey, keyPassword, appId } = config;
-const authentication = new MasterCardAPI.OAuth(consumerKey, keyStorePath, keyAlias, keyPassword);
-
-MasterCardAPI.init({
-  sandbox: true,
-  debug: true,
-  authentication,
-});
+const encoding = 'base64';
+let msgClassDef;
 
 // Get current status of chain
 // eslint-disable-next-line no-unused-vars
@@ -39,7 +41,7 @@ const getBlockChainStatus = () => {
   });
 };
 
-// Provisions a Blockchain node
+// Provisions a Blockchain node (already done)
 const createBlockchainInstance = () => {
   const requestData = {
     network: 'Z0NE', // Don't change this. Use Z0NE
@@ -80,4 +82,75 @@ const createBlockchainInstance = () => {
   });
 };
 
-createBlockchainInstance();
+const loadProtoFile = file => new Promise((resolve, reject) => {
+  const protoFile = fs.statSync(path.join(__dirname, file));
+  if (protoFile) {
+    protobuf.load(file, (err, root) => {
+      if (err) reject(err);
+      resolve(root);
+    });
+  }
+});
+
+const decodeMessage = (data) => {
+  const message = msgClassDef.decode(Buffer.from(data.value, 'hex'));
+  return msgClassDef.toObject(message, {
+    longs: String,
+    enums: String,
+    bytes: String,
+  });
+};
+
+const initApi = () => new Promise((resolve) => {
+  const authentication = new MasterCardAPI.OAuth(consumerKey, keyStorePath, keyAlias, keyPassword);
+  loadProtoFile('message.proto').then((root) => {
+    msgClassDef = root.lookupType('TM19.Message');
+    console.info('[Protocol Buffer] Successfully loaded .proto file');
+    MasterCardAPI.init({
+      sandbox: true,
+      // debug: true,
+      authentication,
+    });
+    resolve();
+  });
+});
+
+// Create a transaction entry
+const createEntry = text => new Promise((resolve, reject) => {
+  const payload = { text };
+  const errorMsg = msgClassDef.verify(payload);
+  if (errorMsg) {
+    reject(Error(errorMsg));
+  } else {
+    const message = msgClassDef.create(payload);
+    blockchain.TransactionEntry.create({
+      app: appId,
+      encoding,
+      value: msgClassDef.encode(message).finish().toString(encoding),
+    }, (error, result) => {
+      if (error) reject(error);
+      console.log('[Create Transaction] Success');
+      resolve(result);
+    });
+  }
+});
+
+// Retrieve a transaction entry
+const getEntry = hash => new Promise((resolve, reject) => {
+  blockchain.TransactionEntry.read('', { hash }, (error, result) => {
+    if (error) reject(error);
+    const decodedMessage = decodeMessage(result);
+    console.log('[Get Transaction] Decoded:', decodeMessage(result));
+    resolve({ result, decodedMessage });
+  });
+});
+
+initApi()
+  .then(() => {
+    const date = new Date().toLocaleString();
+    createEntry(`Hello ${date}`)
+      .then((result) => {
+        getEntry(result.hash);
+      });
+  })
+  .catch((e) => { console.error(e); });
