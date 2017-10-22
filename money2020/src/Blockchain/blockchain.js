@@ -16,6 +16,31 @@ const keyStorePath = path.join(__dirname, '..', '..', config.keyFileName);
 const encoding = 'base64';
 let msgClassDef;
 
+// Loads .proto file
+const loadProtoFile = file => new Promise((resolve, reject) => {
+  const protoFile = fs.statSync(path.join(__dirname, file));
+  if (protoFile) {
+    protobuf.load(file, (err, root) => {
+      if (err) reject(err);
+      resolve(root);
+    });
+  }
+});
+
+const initApi = () => new Promise((resolve) => {
+  const authentication = new MasterCardAPI.OAuth(consumerKey, keyStorePath, keyAlias, keyPassword);
+  loadProtoFile('message.proto').then((root) => {
+    msgClassDef = root.lookupType('TM19.Message');
+    console.info('[Protocol Buffer] Successfully loaded .proto file');
+    MasterCardAPI.init({
+      sandbox: true,
+      // debug: true,
+      authentication,
+    });
+    resolve();
+  });
+});
+
 // Get current status of chain
 // eslint-disable-next-line no-unused-vars
 const getBlockChainStatus = () => {
@@ -82,16 +107,7 @@ const createBlockchainInstance = () => {
   });
 };
 
-const loadProtoFile = file => new Promise((resolve, reject) => {
-  const protoFile = fs.statSync(path.join(__dirname, file));
-  if (protoFile) {
-    protobuf.load(file, (err, root) => {
-      if (err) reject(err);
-      resolve(root);
-    });
-  }
-});
-
+// Decode data from retrieved transaction
 const decodeMessage = (data) => {
   const message = msgClassDef.decode(Buffer.from(data.value, 'hex'));
   return msgClassDef.toObject(message, {
@@ -100,20 +116,6 @@ const decodeMessage = (data) => {
     bytes: String,
   });
 };
-
-const initApi = () => new Promise((resolve) => {
-  const authentication = new MasterCardAPI.OAuth(consumerKey, keyStorePath, keyAlias, keyPassword);
-  loadProtoFile('message.proto').then((root) => {
-    msgClassDef = root.lookupType('TM19.Message');
-    console.info('[Protocol Buffer] Successfully loaded .proto file');
-    MasterCardAPI.init({
-      sandbox: true,
-      // debug: true,
-      authentication,
-    });
-    resolve();
-  });
-});
 
 // Create a transaction entry
 const createEntry = text => new Promise((resolve, reject) => {
@@ -140,17 +142,58 @@ const getEntry = hash => new Promise((resolve, reject) => {
   blockchain.TransactionEntry.read('', { hash }, (error, result) => {
     if (error) reject(error);
     const decodedMessage = decodeMessage(result);
-    console.log('[Get Transaction] Decoded:', decodeMessage(result));
+    console.log('[Get Transaction] Decoded:', { result, decodedMessage });
     resolve({ result, decodedMessage });
   });
 });
 
+// Retrieve Block
+const getBlock = id => new Promise((resolve, reject) => {
+  const requestData = {};
+  blockchain.Block.read(id, requestData, (error, result) => {
+    if (error) reject(error);
+    // console.log(`Result for block ${id}`, result);
+    resolve(result);
+  });
+});
+
+// Get last n blocks
+const getLastNBlocks = async (startHash, remainingHashes = 9, foundHashes = []) => {
+  if (remainingHashes < 1) {
+    return foundHashes;
+  }
+  const currentBlock = await getBlock(startHash);
+  foundHashes.push(currentBlock);
+  remainingHashes--;
+  return getLastNBlocks(currentBlock.previous_block, remainingHashes, foundHashes);
+};
+
+// Get list of transactions
+
+// Retrieve last confirmed block
+const getLastConfirmedBlock = () => new Promise((resolve, reject) => {
+  console.time('getLastConfirmedBlock');
+  const requestData = {};
+  blockchain.Block.list(requestData, (error, result) => {
+    if (error) reject(error);
+    console.log('Last Confirmed Block', result);
+    console.timeEnd('getLastConfirmedBlock');
+    resolve(result);
+  });
+});
+
 initApi()
+  // .then(() => {
+  //   const date = new Date().toLocaleString();
+  //   createEntry(`Hello ${date}`)
+  //     .then((result) => {
+  //       console.log('New Entry:', result);
+  //       // getLastNEntries(result.hash).then((results) => {
+  //       //   console.log('All found hashes', results);
+  //       // });
+  //     });
+  // })
   .then(() => {
-    const date = new Date().toLocaleString();
-    createEntry(`Hello ${date}`)
-      .then((result) => {
-        getEntry(result.hash);
-      });
+    getLastConfirmedBlock().then((result) => { console.time('getLastNBlocks'); getLastNBlocks(result['0'].hash).then((data) => { console.timeEnd('getLastNBlocks'); console.log(data); }); });
   })
   .catch((e) => { console.error(e); });
