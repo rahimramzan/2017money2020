@@ -1,4 +1,3 @@
-// eslint-disable-next-line
 const path = require('path');
 const fs = require('fs');
 const blockchain = require('mastercard-blockchain');
@@ -10,10 +9,12 @@ const {
   consumerKey,
   keyPassword,
   appId,
+  network,
+  format,
+  encoding,
 } = config;
 const { MasterCardAPI } = blockchain;
 const keyStorePath = path.join(__dirname, '..', '..', config.keyFileName);
-const encoding = 'base64';
 let msgClassDef;
 
 // Loads .proto file
@@ -42,18 +43,11 @@ const initApi = () => new Promise((resolve) => {
 });
 
 // Get current status of chain
-// eslint-disable-next-line no-unused-vars
 const getBlockChainStatus = () => {
   const requestData = {};
   blockchain.Status.query(requestData, (error, data) => {
     if (error) {
-      console.error({
-        Status: error.getHttpStatus(),
-        Message: error.getMessage(),
-        ReasonCode: error.getReasonCode(),
-        Source: error.getSource(),
-        error,
-      });
+      throw new Error(error);
     } else {
       console.log('Node AppId:', data.applications[0]); // Application identifier for this node
       console.log('Last Confirmed Block Hash:', data.current.ref);
@@ -69,14 +63,14 @@ const getBlockChainStatus = () => {
 // Provisions a Blockchain node (already done)
 const createBlockchainInstance = () => {
   const requestData = {
-    network: 'Z0NE', // Don't change this. Use Z0NE
+    network, // Don't change this. Use Z0NE
     application: {
       name: appId,
       description: '', // Description of your Blockchain application
       version: 0,
       definition: {
-        format: 'proto3', // Don't change this. Use proto3
-        encoding: 'base64',
+        format, // Don't change this. Use proto3
+        encoding,
         messages: 'Ly8gU2ltcGxlIG5vdGFyeSBhcHBsaWNhdGlvbg0KDQpzeW50YXggPSAicHJvdG8zIjsNCg0KcGFja2FnZSBFMTAyOw0KDQptZXNzYWdlIE1lc3NhZ2Ugew0KCWJ5dGVzIGFydGlmYWN0UmVmZXJlbmNlID0gMTsNCn0\u003d',
       },
     },
@@ -158,7 +152,7 @@ const getBlock = id => new Promise((resolve, reject) => {
 });
 
 // Get last n blocks
-const getLastNBlocks = async (startHash, remainingHashes = 9, foundHashes = []) => {
+const getLastNBlocks = async (startHash, remainingHashes = 5, foundHashes = []) => {
   if (remainingHashes < 1) {
     return foundHashes;
   }

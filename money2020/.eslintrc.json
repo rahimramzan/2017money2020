@@ -3,6 +3,8 @@
   "rules": {
     "no-console": "off",
     "no-plusplus": "off",
-    "no-param-reassign": "off"
+    "no-param-reassign": "off",
+    "function-paren-newline": "off",
+    "no-unused-vars": "warn"
   }
 }
